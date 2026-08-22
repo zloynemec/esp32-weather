@@ -1,0 +1,20 @@
+{
+  "name": "esp32-weather",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "server-api",
+    "telegram-bot"
+  ],
+  "scripts": {
+    "dev": "npm run dev:server",
+    "dev:server": "npm run dev --workspace @esp32-weather/server-api",
+    "dev:bot": "npm run dev --workspace @esp32-weather/telegram-bot",
+    "build": "npm run build --workspaces",
+    "firmware:build": "pio run --project-dir sensor-firmware",
+    "test": "npm run test --workspaces"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  }
+}

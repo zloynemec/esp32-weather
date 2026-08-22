@@ -11,16 +11,23 @@ dist/
 build/
 
 # Databases
+data/
 *.sqlite
 *.sqlite3
 *.db
+*.sqlite-shm
+*.sqlite-wal
 
 # PlatformIO / embedded
 .pio/
 .vscode/
+sensor-firmware/platformio_override.ini
 
 # macOS
 .DS_Store
 
 # Logs
 *.log
+
+# Test coverage
+coverage/

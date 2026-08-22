@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "author": "ESP32 Weather",
+  "editor": "wokwi",
+  "parts": [
+    {
+      "type": "board-esp32-devkit-c-v4",
+      "id": "esp32",
+      "top": 0,
+      "left": 0,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-dht22",
+      "id": "dht22",
+      "top": -19.2,
+      "left": 230.4,
+      "attrs": {
+        "temperature": "23.7",
+        "humidity": "56.2"
+      }
+    }
+  ],
+  "connections": [
+    ["esp32:TX", "$serialMonitor:RX", "", []],
+    ["esp32:RX", "$serialMonitor:TX", "", []],
+    ["dht22:VCC", "esp32:3V3", "red", ["v-28.8", "h-182.4"]],
+    ["dht22:SDA", "esp32:15", "green", ["h-76.8"]],
+    ["dht22:GND", "esp32:GND.1", "black", ["v28.8", "h-182.4"]]
+  ],
+  "dependencies": {}
+}

@@ -19,7 +19,7 @@ Prefer simple solutions over premature abstraction.
 5. Components communicate through explicit APIs/events.
 6. Secrets must never be committed. Use `.env` / `.env.example`.
 7. Keep the MVP runnable locally on macOS before deploying anywhere.
-8. First develop the complete flow with an ESP32 emulator; replace it with physical firmware later.
+8. First develop the complete flow by running the real C++/Arduino firmware on an emulated ESP32; later validate and adapt the same firmware on physical hardware.
 
 ## Required behavior
 
@@ -52,13 +52,13 @@ Prefer simple solutions over premature abstraction.
 
 1. Establish repository structure and contracts.
 2. Implement Server API and SQLite schema.
-3. Implement a software sensor emulator.
-4. Verify emulator -> API -> database flow.
+3. Implement C++/Arduino sensor firmware for an emulated ESP32 and DHT22.
+4. Verify Wokwi ESP32 -> API -> database flow.
 5. Implement Telegram Bot.
 6. Implement notification/event rules.
 7. Implement chart generation.
 8. Add outage/recovery monitoring.
-9. Implement real ESP32 firmware.
+9. Validate and adapt the firmware on a physical ESP32 and sensor.
 10. Add tests and deployment documentation.
 
 ## Coding expectations
