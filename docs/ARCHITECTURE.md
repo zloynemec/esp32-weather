@@ -3,7 +3,7 @@
 ```text
 ┌───────────────────┐
 │ ESP32             │
-│ DHT22             │
+│ DHT22 + 2×DS18B20 │
 │ physical / Wokwi  │
 └─────────┬─────────┘
           │ HTTP POST /api/v1/measurements
@@ -44,11 +44,13 @@ No direct Sensor -> Telegram dependency.
 
 There is no separate host-side sensor emulator. The `sensor-firmware/` C++/Arduino
 application is compiled by PlatformIO and executed on Wokwi's virtual ESP32 with a
-virtual DHT22. It uses the same Wi-Fi and HTTP code intended for the physical device.
+virtual DHT22 and two virtual DS18B20 sensors on one 1-Wire GPIO. It uses the same
+Wi-Fi and HTTP code intended for the physical device.
 
 For local development, the Wokwi IoT Gateway resolves `host.wokwi.internal` to the
-macOS host running Server API. Changing DHT22 controls in Wokwi changes the readings
-observed by the firmware.
+macOS host running Server API. Changing sensor controls in Wokwi changes the readings
+observed by the firmware. Each physical sensor is represented as an independent API
+device: DHT22 reports temperature and humidity, while each DS18B20 reports only temperature.
 
 The first implemented Server API milestone contains:
 
@@ -77,7 +79,7 @@ The initial command milestone supports:
 ## Change notification delivery
 
 Threshold evaluation remains a Server API responsibility. Measurement ingestion
-compares both metrics with the values associated with the last notification and
+compares each available metric with the values associated with the last notification and
 applies the per-device cooldown. When either threshold is reached, the measurement,
 updated reference values and one combined `notification_events` outbox row are
 committed atomically.
@@ -91,13 +93,14 @@ API responsibilities for the following milestones.
 ## Chart generation
 
 Server API owns time filtering and aggregation. Its chart endpoint returns aligned
-temperature and humidity averages with a hard limit of 168 points. The resolutions
+temperature and nullable humidity averages with a hard limit of 168 points. The resolutions
 are one minute for an hour, 15 minutes for a day, one hour for a week and six hours
 for 30 days.
 
 The Telegram Bot renders that series locally as SVG and converts it to a 1200×720
-PNG. Both metrics share the time axis; temperature uses the left Y axis and humidity
-the right Y axis. No measurement data is sent to an external chart service.
+PNG. When humidity exists, both metrics share the time axis; temperature uses the
+left Y axis and humidity the right Y axis. Temperature-only devices render a single
+series. No measurement data is sent to an external chart service.
 
 ## Device registry
 

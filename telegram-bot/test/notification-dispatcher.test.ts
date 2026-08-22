@@ -39,6 +39,23 @@ describe("change notification delivery", () => {
     assert.match(text, /Было: 40,0 %.*\+6,0 п\.п\./);
   });
 
+  it("formats a temperature-only event without humidity", () => {
+    const text = formatChangeNotification(
+      {
+        ...notification,
+        device_id: "esp32-ds18b20-01",
+        current_humidity: null,
+        previous_humidity: null,
+        humidity_delta: null,
+        humidity_triggered: false,
+      },
+      "UTC",
+    );
+
+    assert.match(text, /Температура.*21,2 °C/);
+    assert.doesNotMatch(text, /Влажность/);
+  });
+
   it("acknowledges an event only after Telegram accepts the message", async () => {
     const sent: string[] = [];
     const acknowledged: number[] = [];

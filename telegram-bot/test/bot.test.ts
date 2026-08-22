@@ -75,6 +75,24 @@ describe("WeatherBot", () => {
     assert.deepEqual(sent, []);
   });
 
+  it("formats a temperature-only device without a humidity line", async () => {
+    const sent: string[] = [];
+    const bot = new WeatherBot(
+      { sendMessage: async (_chatId, text) => sent.push(text) },
+      {
+        listDevices: async () => [device],
+        getLatestMeasurement: async () => ({ ...measurement, humidity: null }),
+      },
+      { chatId: "-100123", timeZone: "UTC" },
+      logger,
+    );
+
+    await bot.handleUpdate(commandUpdate("/weather"));
+
+    assert.match(sent[0] ?? "", /23,7 °C/);
+    assert.doesNotMatch(sent[0] ?? "", /Влажность/);
+  });
+
   it("asks for a device when several devices exist and no default is configured", async () => {
     const sent: string[] = [];
     const secondDevice = { ...device, device_id: "esp32-bedroom-01" };

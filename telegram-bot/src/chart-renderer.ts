@@ -27,7 +27,11 @@ export async function renderMeasurementChart(
   }
 
   const temperatureDomain = createDomain(chart.points.map((point) => point.temperature), 1);
-  const humidityDomain = createDomain(chart.points.map((point) => point.humidity), 5, 0, 100);
+  const humidityValues = chart.points.flatMap((point) =>
+    point.humidity === null ? [] : [point.humidity],
+  );
+  const humidityDomain =
+    humidityValues.length > 0 ? createDomain(humidityValues, 5, 0, 100) : null;
   const fromMilliseconds = Date.parse(chart.from);
   const toMilliseconds = Date.parse(chart.to);
   const periodMilliseconds = Math.max(1, toMilliseconds - fromMilliseconds);
@@ -41,23 +45,29 @@ export async function renderMeasurementChart(
   const temperaturePath = createPath(
     chart.points.map((point) => [x(point.timestamp), y(point.temperature, temperatureDomain)]),
   );
-  const humidityPath = createPath(
-    chart.points.map((point) => [x(point.timestamp), y(point.humidity, humidityDomain)]),
-  );
+  const humidityPath = humidityDomain
+    ? createPath(
+        chart.points.flatMap((point): Array<[number, number]> =>
+          point.humidity === null
+            ? []
+            : [[x(point.timestamp), y(point.humidity, humidityDomain)]],
+        ),
+      )
+    : "";
   const grid = createGrid(temperatureDomain, humidityDomain, chart, timeZone);
   const lastPoint = chart.points.at(-1);
   const svg = `
     <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
       <rect width="${width}" height="${height}" rx="28" fill="#f8fafc"/>
-      <text x="${plot.left}" y="58" font-family="Arial, sans-serif" font-size="30" font-weight="700" fill="#172033">Температура и влажность</text>
+      <text x="${plot.left}" y="58" font-family="Arial, sans-serif" font-size="30" font-weight="700" fill="#172033">${humidityDomain ? "Температура и влажность" : "Температура"}</text>
       <text x="${plot.left}" y="94" font-family="Arial, sans-serif" font-size="19" fill="#64748b">${escapeXml(deviceTitle)} · ${rangeTitles[chart.range]}</text>
       <circle cx="720" cy="55" r="7" fill="#ef5b5b"/>
       <text x="736" y="62" font-family="Arial, sans-serif" font-size="18" fill="#334155">Температура${lastPoint ? ` ${formatNumber(lastPoint.temperature)} °C` : ""}</text>
-      <circle cx="940" cy="55" r="7" fill="#3182ce"/>
-      <text x="956" y="62" font-family="Arial, sans-serif" font-size="18" fill="#334155">Влажность${lastPoint ? ` ${formatNumber(lastPoint.humidity)} %` : ""}</text>
+      ${humidityDomain ? `<circle cx="940" cy="55" r="7" fill="#3182ce"/>
+      <text x="956" y="62" font-family="Arial, sans-serif" font-size="18" fill="#334155">Влажность${lastPoint?.humidity !== null && lastPoint?.humidity !== undefined ? ` ${formatNumber(lastPoint.humidity)} %` : ""}</text>` : ""}
       ${grid}
       <path d="${temperaturePath}" fill="none" stroke="#ef5b5b" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="${humidityPath}" fill="none" stroke="#3182ce" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+      ${humidityDomain ? `<path d="${humidityPath}" fill="none" stroke="#3182ce" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>` : ""}
       <text x="${plot.left}" y="680" font-family="Arial, sans-serif" font-size="15" fill="#94a3b8">Усреднение: ${formatBucket(chart.bucket_seconds)} · точек: ${chart.points.length}</text>
     </svg>
   `;
@@ -91,7 +101,7 @@ function createPath(points: Array<[number, number]>): string {
 
 function createGrid(
   temperature: Domain,
-  humidity: Domain,
+  humidity: Domain | null,
   chart: MeasurementChart,
   timeZone: string,
 ): string {
@@ -99,11 +109,13 @@ function createGrid(
     const ratio = index / 5;
     const y = plot.top + ratio * plot.height;
     const temperatureValue = temperature.max - ratio * (temperature.max - temperature.min);
-    const humidityValue = humidity.max - ratio * (humidity.max - humidity.min);
+    const humidityValue = humidity
+      ? humidity.max - ratio * (humidity.max - humidity.min)
+      : null;
     return `
       <line x1="${plot.left}" y1="${y}" x2="${plot.left + plot.width}" y2="${y}" stroke="#dbe3ed" stroke-width="1"/>
       <text x="${plot.left - 15}" y="${y + 6}" text-anchor="end" font-family="Arial, sans-serif" font-size="16" fill="#ef5b5b">${formatNumber(temperatureValue)}°</text>
-      <text x="${plot.left + plot.width + 15}" y="${y + 6}" font-family="Arial, sans-serif" font-size="16" fill="#3182ce">${formatNumber(humidityValue)}%</text>
+      ${humidityValue !== null ? `<text x="${plot.left + plot.width + 15}" y="${y + 6}" font-family="Arial, sans-serif" font-size="16" fill="#3182ce">${formatNumber(humidityValue)}%</text>` : ""}
     `;
   }).join("");
   const from = Date.parse(chart.from);

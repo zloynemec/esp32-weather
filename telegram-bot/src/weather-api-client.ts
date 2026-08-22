@@ -45,9 +45,9 @@ function isNotificationEvent(value: unknown): value is NotificationEvent {
     typeof value.current_temperature === "number" &&
     typeof value.previous_temperature === "number" &&
     typeof value.temperature_delta === "number" &&
-    typeof value.current_humidity === "number" &&
-    typeof value.previous_humidity === "number" &&
-    typeof value.humidity_delta === "number" &&
+    isNullableNumber(value.current_humidity) &&
+    isNullableNumber(value.previous_humidity) &&
+    isNullableNumber(value.humidity_delta) &&
     typeof value.temperature_triggered === "boolean" &&
     typeof value.humidity_triggered === "boolean" &&
     typeof value.created_at === "string" &&
@@ -62,7 +62,7 @@ function isMeasurement(value: unknown): value is Measurement {
     typeof value.device_id === "string" &&
     typeof value.timestamp === "string" &&
     typeof value.temperature === "number" &&
-    typeof value.humidity === "number" &&
+    isNullableNumber(value.humidity) &&
     isNullableNumber(value.uptime) &&
     isNullableNumber(value.wifi_rssi)
   );
@@ -73,7 +73,7 @@ function isChartPoint(value: unknown): boolean {
     isRecord(value) &&
     typeof value.timestamp === "string" &&
     typeof value.temperature === "number" &&
-    typeof value.humidity === "number"
+    isNullableNumber(value.humidity)
   );
 }
 

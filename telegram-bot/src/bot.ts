@@ -169,11 +169,14 @@ export class WeatherBot {
     const deviceTitle = device.description
       ? `${device.description} (${device.device_id})`
       : device.device_id;
+    const metricTitle = chart.points.some((point) => point.humidity !== null)
+      ? "Температура и влажность"
+      : "Температура";
     const photo = await renderMeasurementChart(chart, deviceTitle, this.options.timeZone);
     await this.telegram.sendPhoto(
       this.options.chatId,
       photo,
-      `Температура и влажность: ${this.rangeTitle(parsed.range)} · ${deviceTitle}`,
+      `${metricTitle}: ${this.rangeTitle(parsed.range)} · ${deviceTitle}`,
     );
   }
 

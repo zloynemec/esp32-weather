@@ -19,6 +19,36 @@
         "temperature": "23.7",
         "humidity": "56.2"
       }
+    },
+    {
+      "type": "wokwi-ds18b20",
+      "id": "ds18b20-1",
+      "top": 134.4,
+      "left": 230.4,
+      "attrs": {
+        "temperature": "18.5",
+        "deviceID": "000000000001"
+      }
+    },
+    {
+      "type": "wokwi-ds18b20",
+      "id": "ds18b20-2",
+      "top": 288,
+      "left": 230.4,
+      "attrs": {
+        "temperature": "27.0",
+        "deviceID": "000000000002"
+      }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "onewire-pullup",
+      "top": 153.6,
+      "left": 144,
+      "rotate": 90,
+      "attrs": {
+        "value": "4700"
+      }
     }
   ],
   "connections": [
@@ -26,7 +56,15 @@
     ["esp32:RX", "$serialMonitor:TX", "", []],
     ["dht22:VCC", "esp32:3V3", "red", ["v-28.8", "h-182.4"]],
     ["dht22:SDA", "esp32:15", "green", ["h-76.8"]],
-    ["dht22:GND", "esp32:GND.1", "black", ["v28.8", "h-182.4"]]
+    ["dht22:GND", "esp32:GND.1", "black", ["v28.8", "h-182.4"]],
+    ["ds18b20-1:VCC", "esp32:3V3", "red", ["h-28.8", "v-163.2", "h-153.6"]],
+    ["ds18b20-1:DQ", "esp32:4", "green", ["h-48", "v-48", "h-105.6"]],
+    ["ds18b20-1:GND", "esp32:GND.1", "black", ["h-19.2", "v-115.2", "h-153.6"]],
+    ["ds18b20-2:VCC", "esp32:3V3", "red", ["h-38.4", "v-316.8", "h-144"]],
+    ["ds18b20-2:DQ", "esp32:4", "green", ["h-57.6", "v-201.6", "h-96"]],
+    ["ds18b20-2:GND", "esp32:GND.1", "black", ["h-28.8", "v-268.8", "h-144"]],
+    ["onewire-pullup:1", "esp32:3V3", "red", ["v-153.6", "h-86.4"]],
+    ["onewire-pullup:2", "esp32:4", "green", ["v-48", "h-48"]]
   ],
   "dependencies": {}
 }

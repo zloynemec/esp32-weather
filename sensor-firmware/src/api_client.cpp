@@ -4,17 +4,19 @@
 #include <HTTPClient.h>
 #include <WiFiClient.h>
 
-ApiClient::ApiClient(const char* serverUrl, const char* deviceId)
-    : serverUrl_(serverUrl), deviceId_(deviceId) {}
+ApiClient::ApiClient(const char* serverUrl) : serverUrl_(serverUrl) {}
 
 bool ApiClient::sendMeasurement(
+    const char* deviceId,
     const SensorReading& reading,
     uint64_t uptimeSeconds,
     int32_t wifiRssi) const {
   JsonDocument document;
-  document["device_id"] = deviceId_;
+  document["device_id"] = deviceId;
   document["temperature"] = reading.temperature;
-  document["humidity"] = reading.humidity;
+  if (reading.hasHumidity) {
+    document["humidity"] = reading.humidity;
+  }
   document["uptime"] = uptimeSeconds;
   document["wifi_rssi"] = wifiRssi;
 

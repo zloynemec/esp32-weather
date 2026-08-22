@@ -52,6 +52,30 @@ describe("measurements API", () => {
     assert.equal(listResponse.json().measurements[0].device_id, "esp32-test-01");
   });
 
+  it("stores a temperature-only measurement with null humidity", async () => {
+    app = buildApp({ databasePath: ":memory:", now: () => fixedTime });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/measurements",
+      payload: {
+        device_id: "esp32-ds18b20-01",
+        temperature: 18.5,
+        uptime: 120,
+        wifi_rssi: -61,
+      },
+    });
+
+    assert.equal(response.statusCode, 201);
+    assert.equal(response.json().measurement.humidity, null);
+
+    const listResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/measurements?device_id=esp32-ds18b20-01",
+    });
+    assert.equal(listResponse.json().measurements[0].humidity, null);
+  });
+
   it("rejects invalid measurements without storing them", async () => {
     app = buildApp({ databasePath: ":memory:" });
 
@@ -118,6 +142,10 @@ describe("API documentation", () => {
     assert.ok(specification.paths["/api/v1/devices/{device_id}"].patch);
     assert.ok(specification.paths["/api/v1/notifications/pending"].get);
     assert.ok(specification.paths["/api/v1/notifications/{notification_id}/delivered"].post);
+    const measurementBody =
+      specification.paths["/api/v1/measurements"].post.requestBody.content["application/json"].schema;
+    assert.deepEqual(measurementBody.required, ["device_id", "temperature"]);
+    assert.equal(measurementBody.properties.humidity.type, "number");
     assert.equal(specification.paths["/openapi.json"], undefined);
   });
 });

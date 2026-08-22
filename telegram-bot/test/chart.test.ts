@@ -52,6 +52,49 @@ describe("measurement chart", () => {
     assert.equal(png.subarray(0, 8).toString("hex"), "89504e470d0a1a0a");
   });
 
+  it("renders a temperature-only chart", async () => {
+    const temperatureOnlyChart: MeasurementChart = {
+      ...chart,
+      device_id: "esp32-ds18b20-01",
+      points: chart.points.map((point) => ({ ...point, humidity: null })),
+    };
+    const png = await renderMeasurementChart(temperatureOnlyChart, "Улица", "UTC");
+    const metadata = await sharp(png).metadata();
+
+    assert.equal(metadata.format, "png");
+    assert.equal(metadata.width, 1_200);
+    assert.equal(metadata.height, 720);
+  });
+
+  it("uses a temperature-only Telegram caption when humidity is absent", async () => {
+    const captions: string[] = [];
+    const temperatureOnlyChart: MeasurementChart = {
+      ...chart,
+      device_id: "esp32-ds18b20-01",
+      points: chart.points.map((point) => ({ ...point, humidity: null })),
+    };
+    const bot = new WeatherBot(
+      {
+        sendMessage: async () => undefined,
+        sendPhoto: async (_chatId, _photo, caption) => {
+          captions.push(caption);
+        },
+      },
+      {
+        listDevices: async () => [{ ...device, device_id: "esp32-ds18b20-01" }],
+        getLatestMeasurement: async () => null,
+        getMeasurementChart: async () => temperatureOnlyChart,
+      },
+      { chatId: "-100123", timeZone: "UTC" },
+      logger,
+    );
+
+    await bot.handleUpdate(commandUpdate("/chart"));
+
+    assert.match(captions[0] ?? "", /^Температура: последние сутки/);
+    assert.doesNotMatch(captions[0] ?? "", /влажность/i);
+  });
+
   it("uses the day range by default and sends the generated photo", async () => {
     const photos: Buffer[] = [];
     const requestedRanges: string[] = [];

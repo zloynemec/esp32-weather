@@ -8,8 +8,8 @@ Three interacting projects:
 Responsibilities:
 - run the same C++/Arduino application on an emulated or physical ESP32;
 - connect to Wi-Fi;
-- read temperature and humidity from a DHT22 sensor;
-- send one measurement every minute to Server API;
+- read temperature and humidity from a DHT22 and temperature from two DS18B20 sensors on one 1-Wire bus;
+- send one measurement per logical sensor every minute to Server API;
 - expose basic diagnostics such as uptime and Wi-Fi RSSI.
 
 Example payload:
@@ -61,7 +61,19 @@ Current request contract:
 }
 ```
 
-- `device_id`, `temperature`, and `humidity` are required;
+Temperature-only payload:
+
+```json
+{
+  "device_id": "esp32-wokwi-ds18b20-01",
+  "temperature": 18.5,
+  "uptime": 182340,
+  "wifi_rssi": -61
+}
+```
+
+- `device_id` and `temperature` are required;
+- `humidity` is optional and is stored as `NULL` for temperature-only sensors;
 - `uptime` and `wifi_rssi` are optional diagnostics;
 - unknown properties are rejected;
 - the server assigns the measurement `timestamp` and returns the stored row with
@@ -138,6 +150,9 @@ Initial logical table:
 - uptime
 - wifi_rssi
 
+`humidity` is nullable. Temperature-only devices still participate in storage,
+temperature notification rules and chart aggregation; humidity rules are skipped.
+
 At one measurement per minute:
 - 1,440 rows/day/device
 - 10,080 rows/week/device
@@ -159,7 +174,7 @@ Cooldown is stored per device in seconds, defaults to 600, and may range from 0 
 
 Compare against the value associated with the last notification, not blindly against only the previous one-minute sample.
 
-If both metrics trigger in a short period, combine them into one notification when possible.
+If both available metrics trigger in a short period, combine them into one notification when possible.
 
 The first accepted measurement initializes the comparison baseline without creating
 an event. A triggered decision and its `notification_events` outbox row are stored in
@@ -181,26 +196,28 @@ Period: last 7 days.
 Resolution: one hour.
 Aggregation:
 - average temperature
-- average humidity
+- average humidity when available
 
 Maximum points per series: 168.
 
-The chart should be delivered to Telegram as an image.
+The chart should be delivered to Telegram as an image. A temperature-only device
+produces a single-series chart without a humidity axis.
 
 The command interface extends this model with hour, day and 30-day ranges. The
-default `/chart` request uses one day. Temperature and humidity share one PNG and
-time axis while using separate labelled Y axes because their units differ.
+default `/chart` request uses one day. When humidity is available, temperature and
+humidity share one PNG and time axis while using separate labelled Y axes because
+their units differ.
 
 ## 6. Emulator-first development
 
 Before using physical hardware, compile the production-shaped C++/Arduino firmware
 with PlatformIO and run it on a virtual ESP32 in Wokwi:
 
-- emulate an ESP32 DevKitC and a connected DHT22;
+- emulate an ESP32 DevKitC, a DHT22 and two DS18B20 sensors sharing GPIO 4;
 - read the sensor through the real DHT driver rather than generating values in the host application;
 - connect through the emulated Wi-Fi interface;
 - post to the production API contract every minute;
-- allow temperature and humidity changes through the Wokwi sensor controls;
+- allow all temperatures and DHT22 humidity to be changed through Wokwi controls;
 - reach the local Server API through `host.wokwi.internal`.
 
 The emulator is the Wokwi hardware environment, not a separate Node.js data

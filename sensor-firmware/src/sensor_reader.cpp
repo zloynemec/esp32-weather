@@ -18,5 +18,6 @@ bool SensorReader::read(SensorReading& reading) {
 
   reading.temperature = temperature;
   reading.humidity = humidity;
+  reading.hasHumidity = true;
   return true;
 }

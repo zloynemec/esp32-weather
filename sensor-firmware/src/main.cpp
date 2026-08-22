@@ -4,12 +4,14 @@
 
 #include "api_client.h"
 #include "app_config.h"
+#include "ds18b20_reader.h"
 #include "sensor_reader.h"
 
 namespace {
 
-SensorReader sensor(AppConfig::kDhtPin);
-ApiClient apiClient(AppConfig::kServerUrl, AppConfig::kDeviceId);
+SensorReader dhtSensor(AppConfig::kDhtPin);
+Ds18b20Reader ds18b20Sensors(AppConfig::kOneWirePin);
+ApiClient apiClient(AppConfig::kServerUrl);
 
 uint32_t lastMeasurementAt = 0;
 uint32_t lastWifiAttemptAt = 0;
@@ -47,22 +49,54 @@ bool connectWifi() {
   return true;
 }
 
-void takeAndSendMeasurement() {
+void sendDhtMeasurement(uint64_t uptimeSeconds, int32_t wifiRssi) {
   SensorReading reading{};
-  if (!sensor.read(reading)) {
-    Serial.println("[sensor] failed to read DHT22");
+  if (!dhtSensor.read(reading)) {
+    Serial.println("[dht22] failed to read sensor");
     return;
   }
 
   Serial.printf(
-      "[sensor] temperature=%.1f C humidity=%.1f %%\n",
+      "[dht22] temperature=%.1f C humidity=%.1f %%\n",
       reading.temperature,
       reading.humidity);
 
-  const uint64_t uptimeSeconds = static_cast<uint64_t>(esp_timer_get_time()) / 1000000ULL;
-  if (!apiClient.sendMeasurement(reading, uptimeSeconds, WiFi.RSSI())) {
-    Serial.println("[api] measurement was not accepted");
+  if (!apiClient.sendMeasurement(
+          AppConfig::kDhtDeviceId, reading, uptimeSeconds, wifiRssi)) {
+    Serial.printf("[api] measurement for %s was not accepted\n", AppConfig::kDhtDeviceId);
   }
+}
+
+void sendDs18b20Measurements(uint64_t uptimeSeconds, int32_t wifiRssi) {
+  ds18b20Sensors.requestTemperatures();
+  const size_t sensorCount = ds18b20Sensors.sensorCount() < AppConfig::kDs18b20SensorCount
+      ? ds18b20Sensors.sensorCount()
+      : AppConfig::kDs18b20SensorCount;
+  for (size_t index = 0; index < sensorCount; ++index) {
+    float temperature = 0;
+    if (!ds18b20Sensors.read(index, temperature)) {
+      Serial.printf("[ds18b20] failed to read sensor %u\n", static_cast<unsigned>(index + 1));
+      continue;
+    }
+
+    const SensorReading reading{temperature, 0, false};
+    const char* deviceId = AppConfig::kDs18b20DeviceIds[index];
+    Serial.printf(
+        "[ds18b20] sensor=%u device_id=%s temperature=%.1f C\n",
+        static_cast<unsigned>(index + 1),
+        deviceId,
+        temperature);
+    if (!apiClient.sendMeasurement(deviceId, reading, uptimeSeconds, wifiRssi)) {
+      Serial.printf("[api] measurement for %s was not accepted\n", deviceId);
+    }
+  }
+}
+
+void takeAndSendMeasurements() {
+  const uint64_t uptimeSeconds = static_cast<uint64_t>(esp_timer_get_time()) / 1000000ULL;
+  const int32_t wifiRssi = WiFi.RSSI();
+  sendDhtMeasurement(uptimeSeconds, wifiRssi);
+  sendDs18b20Measurements(uptimeSeconds, wifiRssi);
 }
 
 }  // namespace
@@ -72,7 +106,8 @@ void setup() {
   delay(500);
   Serial.println("[system] ESP32 Weather starting");
 
-  sensor.begin();
+  dhtSensor.begin();
+  ds18b20Sensors.begin();
   connectWifi();
 }
 
@@ -93,7 +128,7 @@ void loop() {
       intervalElapsed(now, lastMeasurementAt, AppConfig::kMeasurementIntervalMs)) {
     firstMeasurement = false;
     lastMeasurementAt = now;
-    takeAndSendMeasurement();
+    takeAndSendMeasurements();
   }
 
   delay(100);

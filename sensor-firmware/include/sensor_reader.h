@@ -6,6 +6,7 @@
 struct SensorReading {
   float temperature;
   float humidity;
+  bool hasHumidity;
 };
 
 class SensorReader {

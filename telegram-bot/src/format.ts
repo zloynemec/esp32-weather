@@ -29,7 +29,9 @@ export function formatMeasurement(
   return [
     `🌤 ${title}`,
     `Температура: ${valueFormatter.format(measurement.temperature)} °C`,
-    `Влажность: ${valueFormatter.format(measurement.humidity)} %`,
+    ...(measurement.humidity !== null
+      ? [`Влажность: ${valueFormatter.format(measurement.humidity)} %`]
+      : []),
     `Измерено: ${time}`,
     ...(diagnostics.length > 0 ? [diagnostics.join(" · ")] : []),
   ].join("\n");
@@ -77,18 +79,25 @@ export function formatChangeNotification(
     timeZone,
   }).format(new Date(notification.measurement_timestamp));
   const temperatureMarker = notification.temperature_triggered ? " ⚠️" : "";
-  const humidityMarker = notification.humidity_triggered ? " ⚠️" : "";
-
-  return [
+  const lines = [
     `🔔 Значительное изменение — ${title}`,
     "",
     `🌡 Температура${temperatureMarker}: ${number.format(notification.current_temperature)} °C`,
     `   Было: ${number.format(notification.previous_temperature)} °C · Δ ${signed.format(notification.temperature_delta)} °C`,
-    `💧 Влажность${humidityMarker}: ${number.format(notification.current_humidity)} %`,
-    `   Было: ${number.format(notification.previous_humidity)} % · Δ ${signed.format(notification.humidity_delta)} п.п.`,
-    "",
-    `Измерено: ${time}`,
-  ].join("\n");
+  ];
+  if (
+    notification.current_humidity !== null &&
+    notification.previous_humidity !== null &&
+    notification.humidity_delta !== null
+  ) {
+    const humidityMarker = notification.humidity_triggered ? " ⚠️" : "";
+    lines.push(
+      `💧 Влажность${humidityMarker}: ${number.format(notification.current_humidity)} %`,
+      `   Было: ${number.format(notification.previous_humidity)} % · Δ ${signed.format(notification.humidity_delta)} п.п.`,
+    );
+  }
+  lines.push("", `Измерено: ${time}`);
+  return lines.join("\n");
 }
 
 function formatDuration(totalSeconds: number): string {

@@ -19,7 +19,7 @@ const measurementBodySchema = {
   type: "object",
   description: "A single reading produced by an ESP32 sensor or the local emulator.",
   additionalProperties: false,
-  required: ["device_id", "temperature", "humidity"],
+  required: ["device_id", "temperature"],
   properties: {
     device_id: {
       type: "string",
@@ -38,7 +38,7 @@ const measurementBodySchema = {
     },
     humidity: {
       type: "number",
-      description: "Relative humidity in percentage points.",
+      description: "Optional relative humidity in percentage points. Omit for temperature-only sensors.",
       minimum: 0,
       maximum: 100,
       example: 56.2,
@@ -103,7 +103,7 @@ const storedMeasurementSchema = {
       example: "2026-08-22T12:34:56.000Z",
     },
     temperature: { type: "number", example: 23.7 },
-    humidity: { type: "number", example: 56.2 },
+    humidity: { type: "number", nullable: true, example: 56.2 },
     uptime: { type: "integer", nullable: true, minimum: 0, example: 182340 },
     wifi_rssi: { type: "integer", nullable: true, minimum: -120, maximum: 0, example: -61 },
   },
@@ -116,7 +116,7 @@ const chartPointSchema = {
   properties: {
     timestamp: { type: "string", format: "date-time" },
     temperature: { type: "number" },
-    humidity: { type: "number" },
+    humidity: { type: "number", nullable: true },
   },
 } as const;
 
@@ -142,7 +142,7 @@ export function registerMeasurementRoutes(
       schema: {
         tags: ["Measurements"],
         summary: "Store a sensor measurement",
-        description: "Validates a sensor reading, assigns server time, and stores it in SQLite.",
+        description: "Validates a sensor reading, assigns server time, and stores it in SQLite. Humidity is optional for temperature-only sensors.",
         body: measurementBodySchema,
         response: {
           201: {
@@ -193,7 +193,7 @@ export function registerMeasurementRoutes(
       schema: {
         tags: ["Measurements"],
         summary: "Get an aggregated chart series",
-        description: "Returns aligned temperature and humidity averages with at most 168 points.",
+        description: "Returns temperature averages and optional humidity averages with at most 168 points.",
         querystring: {
           type: "object",
           additionalProperties: false,

@@ -14,7 +14,7 @@ export interface Measurement {
   device_id: string;
   timestamp: string;
   temperature: number;
-  humidity: number;
+  humidity: number | null;
   uptime: number | null;
   wifi_rssi: number | null;
 }
@@ -24,7 +24,7 @@ export type ChartRange = "hour" | "day" | "week" | "month";
 export interface ChartPoint {
   timestamp: string;
   temperature: number;
-  humidity: number;
+  humidity: number | null;
 }
 
 export interface MeasurementChart {
@@ -45,9 +45,9 @@ export interface NotificationEvent {
   current_temperature: number;
   previous_temperature: number;
   temperature_delta: number;
-  current_humidity: number;
-  previous_humidity: number;
-  humidity_delta: number;
+  current_humidity: number | null;
+  previous_humidity: number | null;
+  humidity_delta: number | null;
   temperature_triggered: boolean;
   humidity_triggered: boolean;
   created_at: string;

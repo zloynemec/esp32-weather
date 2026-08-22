@@ -72,6 +72,23 @@ describe("notification events API", () => {
     assert.equal(deliveredResponse.json().notification.delivered_at, currentTime.toISOString());
     assert.deepEqual(await pendingNotifications(app), []);
   });
+
+  it("creates temperature-only events without humidity values", async () => {
+    let currentTime = new Date("2026-08-22T12:00:00.000Z");
+    app = buildApp({ databasePath: ":memory:", now: () => currentTime });
+
+    await postTemperatureOnlyMeasurement(app, 18.5);
+    currentTime = new Date("2026-08-22T12:10:00.000Z");
+    await postTemperatureOnlyMeasurement(app, 20);
+
+    const [notification] = await pendingNotifications(app);
+    assert.ok(notification);
+    assert.equal(notification.temperature_triggered, true);
+    assert.equal(notification.humidity_triggered, false);
+    assert.equal(notification.current_humidity, null);
+    assert.equal(notification.previous_humidity, null);
+    assert.equal(notification.humidity_delta, null);
+  });
 });
 
 async function postMeasurement(
@@ -83,6 +100,18 @@ async function postMeasurement(
     method: "POST",
     url: "/api/v1/measurements",
     payload: { device_id: "esp32-test-01", temperature, humidity },
+  });
+  assert.equal(response.statusCode, 201);
+}
+
+async function postTemperatureOnlyMeasurement(
+  instance: FastifyInstance,
+  temperature: number,
+): Promise<void> {
+  const response = await instance.inject({
+    method: "POST",
+    url: "/api/v1/measurements",
+    payload: { device_id: "esp32-ds18b20-01", temperature },
   });
   assert.equal(response.statusCode, 201);
 }

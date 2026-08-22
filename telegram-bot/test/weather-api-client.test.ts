@@ -88,7 +88,7 @@ describe("WeatherApiClient", () => {
             {
               timestamp: "2026-08-22T11:00:00.000Z",
               temperature: 21,
-              humidity: 43,
+              humidity: null,
             },
           ],
         },
@@ -97,6 +97,6 @@ describe("WeatherApiClient", () => {
 
     const result = await client.getMeasurementChart("esp32-test-01", "week");
     assert.equal(result.range, "week");
-    assert.equal(result.points[0]?.humidity, 43);
+    assert.equal(result.points[0]?.humidity, null);
   });
 });

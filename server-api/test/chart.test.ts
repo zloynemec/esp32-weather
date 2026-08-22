@@ -57,6 +57,25 @@ describe("measurement chart API", () => {
     });
     assert.equal(invalidResponse.statusCode, 400);
   });
+
+  it("returns null humidity for temperature-only buckets", async () => {
+    let currentTime = new Date("2026-08-22T12:01:00.000Z");
+    app = buildApp({ databasePath: ":memory:", now: () => currentTime });
+    await app.inject({
+      method: "POST",
+      url: "/api/v1/measurements",
+      payload: { device_id: "esp32-ds18b20-01", temperature: 18.5 },
+    });
+    currentTime = new Date("2026-08-22T12:30:00.000Z");
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/v1/measurements/chart?device_id=esp32-ds18b20-01&range=day",
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.json().chart.points[0].humidity, null);
+  });
 });
 
 async function postMeasurement(

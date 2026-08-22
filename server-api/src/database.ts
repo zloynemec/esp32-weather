@@ -18,7 +18,7 @@ interface MeasurementRow {
   device_id: string;
   timestamp: string;
   temperature: number;
-  humidity: number;
+  humidity: number | null;
   uptime: number | null;
   wifi_rssi: number | null;
 }
@@ -49,9 +49,9 @@ interface NotificationEventRow {
   current_temperature: number;
   previous_temperature: number;
   temperature_delta: number;
-  current_humidity: number;
-  previous_humidity: number;
-  humidity_delta: number;
+  current_humidity: number | null;
+  previous_humidity: number | null;
+  humidity_delta: number | null;
   temperature_triggered: number;
   humidity_triggered: number;
   created_at: string;
@@ -61,7 +61,7 @@ interface NotificationEventRow {
 interface ChartPointRow {
   bucket_epoch: number;
   temperature: number;
-  humidity: number;
+  humidity: number | null;
 }
 
 export class WeatherRepository {
@@ -97,7 +97,7 @@ export class WeatherRepository {
         device_id TEXT NOT NULL,
         timestamp TEXT NOT NULL,
         temperature REAL NOT NULL,
-        humidity REAL NOT NULL,
+        humidity REAL,
         uptime INTEGER,
         wifi_rssi INTEGER
       );
@@ -113,6 +113,7 @@ export class WeatherRepository {
       GROUP BY device_id;
     `);
 
+    this.#ensureNullableHumidityColumns();
     this.#ensureDeviceNotificationColumns();
     this.#database.exec(`
       CREATE TABLE IF NOT EXISTS notification_events (
@@ -124,9 +125,9 @@ export class WeatherRepository {
         current_temperature REAL NOT NULL,
         previous_temperature REAL NOT NULL,
         temperature_delta REAL NOT NULL,
-        current_humidity REAL NOT NULL,
-        previous_humidity REAL NOT NULL,
-        humidity_delta REAL NOT NULL,
+        current_humidity REAL,
+        previous_humidity REAL,
+        humidity_delta REAL,
         temperature_triggered INTEGER NOT NULL CHECK (temperature_triggered IN (0, 1)),
         humidity_triggered INTEGER NOT NULL CHECK (humidity_triggered IN (0, 1)),
         created_at TEXT NOT NULL,
@@ -137,19 +138,19 @@ export class WeatherRepository {
       CREATE INDEX IF NOT EXISTS idx_notification_events_pending
         ON notification_events (delivered_at, id);
 
-      UPDATE devices
-      SET
-        last_notified_temperature = (
+      UPDATE devices SET last_notified_temperature = (
           SELECT temperature FROM measurements
           WHERE measurements.device_id = devices.device_id
           ORDER BY timestamp DESC, id DESC LIMIT 1
-        ),
-        last_notified_humidity = (
+        )
+      WHERE last_notified_temperature IS NULL;
+
+      UPDATE devices SET last_notified_humidity = (
           SELECT humidity FROM measurements
-          WHERE measurements.device_id = devices.device_id
+          WHERE measurements.device_id = devices.device_id AND humidity IS NOT NULL
           ORDER BY timestamp DESC, id DESC LIMIT 1
         )
-      WHERE last_notified_temperature IS NULL OR last_notified_humidity IS NULL;
+      WHERE last_notified_humidity IS NULL;
     `);
   }
 
@@ -173,7 +174,7 @@ export class WeatherRepository {
           timestamp,
           timestamp,
           input.temperature,
-          input.humidity,
+          input.humidity ?? null,
         );
 
       const result = this.#database
@@ -186,7 +187,7 @@ export class WeatherRepository {
           input.device_id,
           timestamp,
           input.temperature,
-          input.humidity,
+          input.humidity ?? null,
           input.uptime ?? null,
           input.wifi_rssi ?? null,
         );
@@ -195,12 +196,11 @@ export class WeatherRepository {
       const device = this.#getDeviceNotificationState(input.device_id);
       if (
         device !== null &&
-        device.last_notified_temperature !== null &&
-        device.last_notified_humidity !== null
+        device.last_notified_temperature !== null
       ) {
         const decision = evaluateNotification({
           currentTemperature: input.temperature,
-          currentHumidity: input.humidity,
+          currentHumidity: input.humidity ?? null,
           previousTemperature: device.last_notified_temperature,
           previousHumidity: device.last_notified_humidity,
           temperatureThreshold: device.temperature_delta_threshold,
@@ -237,7 +237,7 @@ export class WeatherRepository {
               input.temperature,
               device.last_notified_temperature,
               decision.temperatureDelta,
-              input.humidity,
+              input.humidity ?? null,
               device.last_notified_humidity,
               decision.humidityDelta,
               decision.temperatureTriggered ? 1 : 0,
@@ -253,7 +253,20 @@ export class WeatherRepository {
                 last_notified_at = ?
               WHERE device_id = ?
             `)
-            .run(input.temperature, input.humidity, timestamp, input.device_id);
+            .run(
+              input.temperature,
+              input.humidity ?? device.last_notified_humidity,
+              timestamp,
+              input.device_id,
+            );
+        } else if (device.last_notified_humidity === null && input.humidity !== undefined) {
+          this.#database
+            .prepare(`
+              UPDATE devices
+              SET last_notified_humidity = ?
+              WHERE device_id = ?
+            `)
+            .run(input.humidity, input.device_id);
         }
       }
       this.#database.exec("COMMIT;");
@@ -267,7 +280,7 @@ export class WeatherRepository {
       device_id: input.device_id,
       timestamp,
       temperature: input.temperature,
-      humidity: input.humidity,
+      humidity: input.humidity ?? null,
       uptime: input.uptime ?? null,
       wifi_rssi: input.wifi_rssi ?? null,
     };
@@ -479,6 +492,114 @@ export class WeatherRepository {
       temperature_triggered: row.temperature_triggered === 1,
       humidity_triggered: row.humidity_triggered === 1,
     };
+  }
+
+  #ensureNullableHumidityColumns(): void {
+    const measurementColumns = this.#database
+      .prepare("PRAGMA table_info(measurements)")
+      .all() as unknown as Array<{ name: string; notnull: number }>;
+    const measurementHumidity = measurementColumns.find((column) => column.name === "humidity");
+    const notificationTableExists = this.#database
+      .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'notification_events'")
+      .get() !== undefined;
+    const notificationHumidityIsRequired = notificationTableExists
+      ? (
+          this.#database.prepare("PRAGMA table_info(notification_events)").all() as unknown as Array<{
+            name: string;
+            notnull: number;
+          }>
+        ).some((column) =>
+          ["current_humidity", "previous_humidity", "humidity_delta"].includes(column.name) &&
+          column.notnull === 1,
+        )
+      : false;
+
+    if (measurementHumidity?.notnull !== 1 && !notificationHumidityIsRequired) {
+      return;
+    }
+
+    this.#database.exec("PRAGMA foreign_keys = OFF;");
+    this.#database.exec("BEGIN IMMEDIATE;");
+    try {
+      if (notificationTableExists) {
+        this.#database.exec("ALTER TABLE notification_events RENAME TO notification_events_legacy;");
+      }
+      this.#database.exec(`
+        ALTER TABLE measurements RENAME TO measurements_legacy;
+
+        CREATE TABLE measurements (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          device_id TEXT NOT NULL,
+          timestamp TEXT NOT NULL,
+          temperature REAL NOT NULL,
+          humidity REAL,
+          uptime INTEGER,
+          wifi_rssi INTEGER
+        );
+
+        INSERT INTO measurements (
+          id, device_id, timestamp, temperature, humidity, uptime, wifi_rssi
+        )
+        SELECT id, device_id, timestamp, temperature, humidity, uptime, wifi_rssi
+        FROM measurements_legacy;
+      `);
+
+      if (notificationTableExists) {
+        this.#database.exec(`
+          CREATE TABLE notification_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            device_id TEXT NOT NULL,
+            device_description TEXT,
+            measurement_id INTEGER NOT NULL,
+            measurement_timestamp TEXT NOT NULL,
+            current_temperature REAL NOT NULL,
+            previous_temperature REAL NOT NULL,
+            temperature_delta REAL NOT NULL,
+            current_humidity REAL,
+            previous_humidity REAL,
+            humidity_delta REAL,
+            temperature_triggered INTEGER NOT NULL CHECK (temperature_triggered IN (0, 1)),
+            humidity_triggered INTEGER NOT NULL CHECK (humidity_triggered IN (0, 1)),
+            created_at TEXT NOT NULL,
+            delivered_at TEXT,
+            FOREIGN KEY (measurement_id) REFERENCES measurements(id)
+          );
+
+          INSERT INTO notification_events (
+            id, device_id, device_description, measurement_id, measurement_timestamp,
+            current_temperature, previous_temperature, temperature_delta,
+            current_humidity, previous_humidity, humidity_delta,
+            temperature_triggered, humidity_triggered, created_at, delivered_at
+          )
+          SELECT
+            id, device_id, device_description, measurement_id, measurement_timestamp,
+            current_temperature, previous_temperature, temperature_delta,
+            current_humidity, previous_humidity, humidity_delta,
+            temperature_triggered, humidity_triggered, created_at, delivered_at
+          FROM notification_events_legacy;
+
+          DROP TABLE notification_events_legacy;
+        `);
+      }
+
+      this.#database.exec(`
+        DROP TABLE measurements_legacy;
+        CREATE INDEX idx_measurements_device_timestamp
+          ON measurements (device_id, timestamp DESC);
+      `);
+      if (notificationTableExists) {
+        this.#database.exec(`
+          CREATE INDEX idx_notification_events_pending
+            ON notification_events (delivered_at, id);
+        `);
+      }
+      this.#database.exec("COMMIT;");
+    } catch (error) {
+      this.#database.exec("ROLLBACK;");
+      throw error;
+    } finally {
+      this.#database.exec("PRAGMA foreign_keys = ON;");
+    }
   }
 
   #ensureDeviceNotificationColumns(): void {
