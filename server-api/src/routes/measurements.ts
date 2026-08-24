@@ -8,6 +8,8 @@ interface ChartQuery {
   range?: ChartRange;
 }
 
+const maximumClockSkewMilliseconds = 5 * 60 * 1_000;
+
 const chartRanges = {
   hour: { durationSeconds: 3_600, bucketSeconds: 60, maxPoints: 60 },
   day: { durationSeconds: 86_400, bucketSeconds: 900, maxPoints: 96 },
@@ -19,7 +21,7 @@ const measurementBodySchema = {
   type: "object",
   description: "A single reading produced by an ESP32 sensor or the local emulator.",
   additionalProperties: false,
-  required: ["device_id", "temperature"],
+  required: ["device_id", "measured_at", "temperature"],
   properties: {
     device_id: {
       type: "string",
@@ -28,6 +30,12 @@ const measurementBodySchema = {
       maxLength: 64,
       pattern: "^[A-Za-z0-9._-]+$",
       example: "esp32-emulator-01",
+    },
+    measured_at: {
+      type: "string",
+      format: "date-time",
+      description: "Time at which the sensor captured the reading, in UTC.",
+      example: "2026-08-24T12:34:00Z",
     },
     temperature: {
       type: "number",
@@ -87,6 +95,7 @@ const storedMeasurementSchema = {
   required: [
     "id",
     "device_id",
+    "measured_at",
     "timestamp",
     "temperature",
     "humidity",
@@ -96,6 +105,12 @@ const storedMeasurementSchema = {
   properties: {
     id: { type: "integer", minimum: 1, example: 1 },
     device_id: { type: "string", example: "esp32-emulator-01" },
+    measured_at: {
+      type: "string",
+      format: "date-time",
+      description: "Time at which the sensor captured the reading.",
+      example: "2026-08-24T12:34:00.000Z",
+    },
     timestamp: {
       type: "string",
       format: "date-time",
@@ -142,7 +157,7 @@ export function registerMeasurementRoutes(
       schema: {
         tags: ["Measurements"],
         summary: "Store a sensor measurement",
-        description: "Validates a sensor reading, assigns server time, and stores it in SQLite. Humidity is optional for temperature-only sensors.",
+        description: "Validates a sensor reading, stores its device capture time, assigns server receipt time, and persists it in SQLite. Humidity is optional for temperature-only sensors.",
         body: measurementBodySchema,
         response: {
           201: {
@@ -157,7 +172,20 @@ export function registerMeasurementRoutes(
       },
     },
     async (request, reply) => {
-      const measurement = repository.insert(request.body, now().toISOString());
+      const receivedAt = now();
+      const measuredAt = new Date(request.body.measured_at);
+      if (measuredAt.getTime() > receivedAt.getTime() + maximumClockSkewMilliseconds) {
+        return reply.code(400).send({
+          statusCode: 400,
+          code: "MEASUREMENT_TIME_IN_FUTURE",
+          error: "Bad Request",
+          message: "measured_at must not be more than 5 minutes in the future",
+        });
+      }
+      const measurement = repository.insert(
+        { ...request.body, measured_at: measuredAt.toISOString() },
+        receivedAt.toISOString(),
+      );
       return reply.code(201).send({ measurement });
     },
   );
@@ -168,7 +196,7 @@ export function registerMeasurementRoutes(
       schema: {
         tags: ["Measurements"],
         summary: "List recent measurements",
-        description: "Returns newest measurements first, optionally filtered by device.",
+        description: "Returns measurements newest by sensor capture time, optionally filtered by device.",
         querystring: measurementQuerySchema,
         response: {
           200: {

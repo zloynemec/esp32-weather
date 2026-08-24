@@ -6,6 +6,7 @@ import type { FastifyInstance } from "fastify";
 import { buildApp } from "../src/app.js";
 
 const fixedTime = new Date("2026-08-22T12:34:56.000Z");
+const measuredTime = "2026-08-22T12:34:00.000Z";
 let app: FastifyInstance | undefined;
 
 afterEach(async () => {
@@ -22,6 +23,7 @@ describe("measurements API", () => {
       url: "/api/v1/measurements",
       payload: {
         device_id: "esp32-test-01",
+        measured_at: measuredTime,
         temperature: 23.7,
         humidity: 56.2,
         uptime: 120,
@@ -34,6 +36,7 @@ describe("measurements API", () => {
       measurement: {
         id: 1,
         device_id: "esp32-test-01",
+        measured_at: measuredTime,
         timestamp: fixedTime.toISOString(),
         temperature: 23.7,
         humidity: 56.2,
@@ -60,6 +63,7 @@ describe("measurements API", () => {
       url: "/api/v1/measurements",
       payload: {
         device_id: "esp32-ds18b20-01",
+        measured_at: measuredTime,
         temperature: 18.5,
         uptime: 120,
         wifi_rssi: -61,
@@ -84,12 +88,24 @@ describe("measurements API", () => {
       url: "/api/v1/measurements",
       payload: {
         device_id: "esp32-test-01",
+        measured_at: measuredTime,
         temperature: 20,
         humidity: 101,
       },
     });
 
     assert.equal(response.statusCode, 400);
+
+    const missingCaptureTimeResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/measurements",
+      payload: {
+        device_id: "esp32-test-01",
+        temperature: 20,
+        humidity: 40,
+      },
+    });
+    assert.equal(missingCaptureTimeResponse.statusCode, 400);
 
     const listResponse = await app.inject({ method: "GET", url: "/api/v1/measurements" });
     assert.deepEqual(listResponse.json(), { measurements: [] });
@@ -103,6 +119,7 @@ describe("measurements API", () => {
       url: "/api/v1/measurements",
       payload: {
         device_id: "esp32-test-01",
+        measured_at: measuredTime,
         temperature: 20,
         humidity: 40,
         telegram_chat_id: "not-allowed",
@@ -112,6 +129,23 @@ describe("measurements API", () => {
 
     const listResponse = await app.inject({ method: "GET", url: "/api/v1/measurements?limit=1001" });
     assert.equal(listResponse.statusCode, 400);
+  });
+
+  it("rejects a sensor timestamp too far in the future", async () => {
+    app = buildApp({ databasePath: ":memory:", now: () => fixedTime });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/measurements",
+      payload: {
+        device_id: "esp32-test-01",
+        measured_at: "2026-08-22T12:40:00.000Z",
+        temperature: 20,
+      },
+    });
+
+    assert.equal(response.statusCode, 400);
+    assert.equal(response.json().code, "MEASUREMENT_TIME_IN_FUTURE");
   });
 });
 
@@ -144,7 +178,7 @@ describe("API documentation", () => {
     assert.ok(specification.paths["/api/v1/notifications/{notification_id}/delivered"].post);
     const measurementBody =
       specification.paths["/api/v1/measurements"].post.requestBody.content["application/json"].schema;
-    assert.deepEqual(measurementBody.required, ["device_id", "temperature"]);
+    assert.deepEqual(measurementBody.required, ["device_id", "measured_at", "temperature"]);
     assert.equal(measurementBody.properties.humidity.type, "number");
     assert.equal(specification.paths["/openapi.json"], undefined);
   });

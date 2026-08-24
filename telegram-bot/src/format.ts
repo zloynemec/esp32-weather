@@ -12,7 +12,7 @@ export function formatMeasurement(
     dateStyle: "medium",
     timeStyle: "medium",
     timeZone,
-  }).format(new Date(measurement.timestamp));
+  }).format(new Date(measurement.measured_at));
   const valueFormatter = new Intl.NumberFormat("ru-RU", {
     minimumFractionDigits: 1,
     maximumFractionDigits: 1,

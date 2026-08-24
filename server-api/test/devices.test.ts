@@ -22,6 +22,7 @@ describe("devices API", () => {
       url: "/api/v1/measurements",
       payload: {
         device_id: "esp32-wokwi-01",
+        measured_at: acceptedAt.toISOString(),
         temperature: 23.7,
         humidity: 56.2,
       },
@@ -57,6 +58,7 @@ describe("devices API", () => {
       url: "/api/v1/measurements",
       payload: {
         device_id: "esp32-wokwi-01",
+        measured_at: currentTime.toISOString(),
         temperature: 20,
         humidity: 40,
       },
@@ -89,7 +91,12 @@ describe("devices API", () => {
     await app.inject({
       method: "POST",
       url: "/api/v1/measurements",
-      payload: { device_id: "device-b", temperature: 20, humidity: 40 },
+      payload: {
+        device_id: "device-b",
+        measured_at: currentTime.toISOString(),
+        temperature: 20,
+        humidity: 40,
+      },
     });
     await app.inject({
       method: "PATCH",
@@ -101,7 +108,12 @@ describe("devices API", () => {
     await app.inject({
       method: "POST",
       url: "/api/v1/measurements",
-      payload: { device_id: "device-b", temperature: 21, humidity: 41 },
+      payload: {
+        device_id: "device-b",
+        measured_at: currentTime.toISOString(),
+        temperature: 21,
+        humidity: 41,
+      },
     });
 
     const listResponse = await app.inject({ method: "GET", url: "/api/v1/devices" });

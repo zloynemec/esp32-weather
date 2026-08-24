@@ -1,9 +1,10 @@
 import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import dotenv from "dotenv";
 
-const environmentDirectory = process.env.INIT_CWD ?? process.cwd();
-dotenv.config({ path: resolve(environmentDirectory, ".env"), quiet: true });
+const projectDirectory = fileURLToPath(new URL("../../", import.meta.url));
+dotenv.config({ path: resolve(projectDirectory, ".env"), quiet: true });
 
 function readPort(value: string | undefined): number {
   const port = Number(value ?? "3000");
@@ -24,7 +25,7 @@ export function loadConfig(): ServerConfig {
   return {
     host: process.env.HOST ?? "127.0.0.1",
     port: readPort(process.env.PORT),
-    databasePath: resolve(environmentDirectory, process.env.DATABASE_PATH ?? "data/weather.sqlite"),
+    databasePath: resolve(projectDirectory, process.env.DATABASE_PATH ?? "data/weather.sqlite"),
     logLevel: process.env.LOG_LEVEL ?? "info",
   };
 }

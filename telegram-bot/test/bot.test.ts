@@ -18,6 +18,7 @@ const device: Device = {
 const measurement: Measurement = {
   id: 1,
   device_id: device.device_id,
+  measured_at: "2026-08-22T12:34:00.000Z",
   timestamp: "2026-08-22T12:34:56.000Z",
   temperature: 23.7,
   humidity: 56.2,
@@ -56,6 +57,8 @@ describe("WeatherBot", () => {
     assert.match(sent[0] ?? "", /Рабочий кабинет/);
     assert.match(sent[0] ?? "", /23,7 °C/);
     assert.match(sent[0] ?? "", /56,2 %/);
+    assert.match(sent[0] ?? "", /12:34:00/);
+    assert.doesNotMatch(sent[0] ?? "", /12:34:56/);
   });
 
   it("ignores messages from chats that are not configured", async () => {

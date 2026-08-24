@@ -18,6 +18,9 @@ replace the firmware with a host-side data generator.
 - read temperature and humidity from DHT22;
 - read both DS18B20 temperatures with one shared conversion request;
 - send three independent JSON measurements to Server API every 60 seconds;
+- capture measurements even while Server API is unavailable;
+- queue up to 180 records in RAM and retry delivery oldest-first;
+- include an NTP-derived UTC `measured_at` capture time;
 - include device uptime and Wi-Fi RSSI;
 - log sensor and HTTP errors to the serial monitor.
 
@@ -39,6 +42,13 @@ while the firmware is running. The logical device IDs are:
 - `esp32-wokwi-ds18b20-02` for the second discovered DS18B20.
 
 DS18B20 payloads omit `humidity`; Server API persists it as `NULL`.
+
+Every reading enters the RAM queue before HTTP upload and leaves it only after a
+successful API response. Failed uploads are retried every five seconds. The queue
+holds about one hour for all three sensors, drops the oldest record on overflow,
+and is cleared when the ESP32 resets or loses power. Until NTP synchronization is
+available, readings remain queued; their capture times are reconstructed from
+`millis()` after the clock synchronizes.
 
 For a physical device, copy `platformio_override.example.ini` to
 `platformio_override.ini` and replace Wi-Fi and API settings. Never commit the

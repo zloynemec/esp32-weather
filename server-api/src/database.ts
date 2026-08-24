@@ -16,6 +16,7 @@ import { evaluateNotification } from "./notification-rules.js";
 interface MeasurementRow {
   id: number;
   device_id: string;
+  measured_at: string;
   timestamp: string;
   temperature: number;
   humidity: number | null;
@@ -95,6 +96,7 @@ export class WeatherRepository {
       CREATE TABLE IF NOT EXISTS measurements (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         device_id TEXT NOT NULL,
+        measured_at TEXT NOT NULL,
         timestamp TEXT NOT NULL,
         temperature REAL NOT NULL,
         humidity REAL,
@@ -114,6 +116,7 @@ export class WeatherRepository {
     `);
 
     this.#ensureNullableHumidityColumns();
+    this.#ensureMeasurementTimeColumn();
     this.#ensureDeviceNotificationColumns();
     this.#database.exec(`
       CREATE TABLE IF NOT EXISTS notification_events (
@@ -141,14 +144,14 @@ export class WeatherRepository {
       UPDATE devices SET last_notified_temperature = (
           SELECT temperature FROM measurements
           WHERE measurements.device_id = devices.device_id
-          ORDER BY timestamp DESC, id DESC LIMIT 1
+          ORDER BY measured_at DESC, id DESC LIMIT 1
         )
       WHERE last_notified_temperature IS NULL;
 
       UPDATE devices SET last_notified_humidity = (
           SELECT humidity FROM measurements
           WHERE measurements.device_id = devices.device_id AND humidity IS NOT NULL
-          ORDER BY timestamp DESC, id DESC LIMIT 1
+          ORDER BY measured_at DESC, id DESC LIMIT 1
         )
       WHERE last_notified_humidity IS NULL;
     `);
@@ -180,11 +183,12 @@ export class WeatherRepository {
       const result = this.#database
         .prepare(`
           INSERT INTO measurements (
-            device_id, timestamp, temperature, humidity, uptime, wifi_rssi
-          ) VALUES (?, ?, ?, ?, ?, ?)
+            device_id, measured_at, timestamp, temperature, humidity, uptime, wifi_rssi
+          ) VALUES (?, ?, ?, ?, ?, ?, ?)
         `)
         .run(
           input.device_id,
+          input.measured_at,
           timestamp,
           input.temperature,
           input.humidity ?? null,
@@ -207,7 +211,7 @@ export class WeatherRepository {
           humidityThreshold: device.humidity_delta_threshold,
           cooldownSeconds: device.notification_cooldown_seconds,
           lastNotificationAt: device.last_notified_at,
-          measurementTimestamp: timestamp,
+          measurementTimestamp: input.measured_at,
         });
 
         if (decision !== null) {
@@ -233,7 +237,7 @@ export class WeatherRepository {
               input.device_id,
               device.description,
               measurementId,
-              timestamp,
+              input.measured_at,
               input.temperature,
               device.last_notified_temperature,
               decision.temperatureDelta,
@@ -256,7 +260,7 @@ export class WeatherRepository {
             .run(
               input.temperature,
               input.humidity ?? device.last_notified_humidity,
-              timestamp,
+              input.measured_at,
               input.device_id,
             );
         } else if (device.last_notified_humidity === null && input.humidity !== undefined) {
@@ -278,6 +282,7 @@ export class WeatherRepository {
     return {
       id: measurementId,
       device_id: input.device_id,
+      measured_at: input.measured_at,
       timestamp,
       temperature: input.temperature,
       humidity: input.humidity ?? null,
@@ -290,10 +295,10 @@ export class WeatherRepository {
     if (query.device_id !== undefined) {
       return this.#database
         .prepare(`
-          SELECT id, device_id, timestamp, temperature, humidity, uptime, wifi_rssi
+          SELECT id, device_id, measured_at, timestamp, temperature, humidity, uptime, wifi_rssi
           FROM measurements
           WHERE device_id = ?
-          ORDER BY timestamp DESC, id DESC
+          ORDER BY measured_at DESC, id DESC
           LIMIT ?
         `)
         .all(query.device_id, query.limit ?? 100) as unknown as MeasurementRow[];
@@ -301,9 +306,9 @@ export class WeatherRepository {
 
     return this.#database
       .prepare(`
-        SELECT id, device_id, timestamp, temperature, humidity, uptime, wifi_rssi
+        SELECT id, device_id, measured_at, timestamp, temperature, humidity, uptime, wifi_rssi
         FROM measurements
-        ORDER BY timestamp DESC, id DESC
+        ORDER BY measured_at DESC, id DESC
         LIMIT ?
       `)
       .all(query.limit ?? 100) as unknown as MeasurementRow[];
@@ -319,11 +324,11 @@ export class WeatherRepository {
     const rows = this.#database
       .prepare(`
         SELECT
-          CAST(CAST(strftime('%s', timestamp) AS INTEGER) / ? AS INTEGER) * ? AS bucket_epoch,
+          CAST(CAST(strftime('%s', measured_at) AS INTEGER) / ? AS INTEGER) * ? AS bucket_epoch,
           AVG(temperature) AS temperature,
           AVG(humidity) AS humidity
         FROM measurements
-        WHERE device_id = ? AND timestamp > ? AND timestamp <= ?
+        WHERE device_id = ? AND measured_at > ? AND measured_at <= ?
         GROUP BY bucket_epoch
         ORDER BY bucket_epoch
         LIMIT ?
@@ -499,6 +504,9 @@ export class WeatherRepository {
       .prepare("PRAGMA table_info(measurements)")
       .all() as unknown as Array<{ name: string; notnull: number }>;
     const measurementHumidity = measurementColumns.find((column) => column.name === "humidity");
+    const measurementTimeExists = measurementColumns.some(
+      (column) => column.name === "measured_at",
+    );
     const notificationTableExists = this.#database
       .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'notification_events'")
       .get() !== undefined;
@@ -530,6 +538,7 @@ export class WeatherRepository {
         CREATE TABLE measurements (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           device_id TEXT NOT NULL,
+          measured_at TEXT NOT NULL,
           timestamp TEXT NOT NULL,
           temperature REAL NOT NULL,
           humidity REAL,
@@ -538,9 +547,10 @@ export class WeatherRepository {
         );
 
         INSERT INTO measurements (
-          id, device_id, timestamp, temperature, humidity, uptime, wifi_rssi
+          id, device_id, measured_at, timestamp, temperature, humidity, uptime, wifi_rssi
         )
-        SELECT id, device_id, timestamp, temperature, humidity, uptime, wifi_rssi
+        SELECT id, device_id, ${measurementTimeExists ? "COALESCE(measured_at, timestamp)" : "timestamp"},
+          timestamp, temperature, humidity, uptime, wifi_rssi
         FROM measurements_legacy;
       `);
 
@@ -584,8 +594,8 @@ export class WeatherRepository {
 
       this.#database.exec(`
         DROP TABLE measurements_legacy;
-        CREATE INDEX idx_measurements_device_timestamp
-          ON measurements (device_id, timestamp DESC);
+        CREATE INDEX idx_measurements_device_measured_at
+          ON measurements (device_id, measured_at DESC);
       `);
       if (notificationTableExists) {
         this.#database.exec(`
@@ -600,6 +610,27 @@ export class WeatherRepository {
     } finally {
       this.#database.exec("PRAGMA foreign_keys = ON;");
     }
+  }
+
+  #ensureMeasurementTimeColumn(): void {
+    const columns = this.#database
+      .prepare("PRAGMA table_info(measurements)")
+      .all() as unknown as Array<{ name: string }>;
+    const names = new Set(columns.map((column) => column.name));
+
+    if (!names.has("measured_at")) {
+      this.#database.exec("ALTER TABLE measurements ADD COLUMN measured_at TEXT;");
+    }
+
+    this.#database.exec(`
+      UPDATE measurements
+      SET measured_at = timestamp
+      WHERE measured_at IS NULL;
+
+      DROP INDEX IF EXISTS idx_measurements_device_timestamp;
+      CREATE INDEX IF NOT EXISTS idx_measurements_device_measured_at
+        ON measurements (device_id, measured_at DESC);
+    `);
   }
 
   #ensureDeviceNotificationColumns(): void {

@@ -90,7 +90,11 @@ describe("SQLite migrations", () => {
     const createResponse = await app.inject({
       method: "POST",
       url: "/api/v1/measurements",
-      payload: { device_id: "esp32-ds18b20-01", temperature: 18.5 },
+      payload: {
+        device_id: "esp32-ds18b20-01",
+        measured_at: "2026-08-22T12:00:30.000Z",
+        temperature: 18.5,
+      },
     });
     assert.equal(createResponse.statusCode, 201);
 
@@ -99,6 +103,7 @@ describe("SQLite migrations", () => {
     assert.equal(listResponse.json().measurements.length, 2);
     assert.equal(listResponse.json().measurements[0].humidity, null);
     assert.equal(listResponse.json().measurements[1].humidity, 56.2);
+    assert.equal(listResponse.json().measurements[1].measured_at, "2026-08-22T12:00:00.000Z");
 
     const notificationsResponse = await app.inject({
       method: "GET",
@@ -106,5 +111,44 @@ describe("SQLite migrations", () => {
     });
     assert.equal(notificationsResponse.statusCode, 200);
     assert.equal(notificationsResponse.json().notifications[0].humidity_delta, 6.2);
+  });
+
+  it("backfills measured_at in the current nullable-humidity schema", async () => {
+    temporaryDirectory = mkdtempSync(join(tmpdir(), "esp32-weather-time-migration-"));
+    const databasePath = join(temporaryDirectory, "weather.sqlite");
+    const previous = new DatabaseSync(databasePath);
+    previous.exec(`
+      CREATE TABLE devices (
+        device_id TEXT PRIMARY KEY,
+        description TEXT,
+        temperature_delta_threshold REAL NOT NULL DEFAULT 1.0,
+        humidity_delta_threshold REAL NOT NULL DEFAULT 5.0,
+        notification_cooldown_seconds INTEGER NOT NULL DEFAULT 600,
+        last_notified_temperature REAL,
+        last_notified_humidity REAL,
+        last_notified_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        last_seen_at TEXT
+      );
+      CREATE TABLE measurements (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        device_id TEXT NOT NULL,
+        timestamp TEXT NOT NULL,
+        temperature REAL NOT NULL,
+        humidity REAL,
+        uptime INTEGER,
+        wifi_rssi INTEGER
+      );
+      INSERT INTO measurements (device_id, timestamp, temperature, humidity)
+      VALUES ('esp32-wokwi-01', '2026-08-22T12:00:00.000Z', 23.7, 56.2);
+    `);
+    previous.close();
+
+    app = buildApp({ databasePath });
+    const response = await app.inject({ method: "GET", url: "/api/v1/measurements" });
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.json().measurements[0].measured_at, "2026-08-22T12:00:00.000Z");
   });
 });

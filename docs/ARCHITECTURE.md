@@ -52,6 +52,11 @@ macOS host running Server API. Changing sensor controls in Wokwi changes the rea
 observed by the firmware. Each physical sensor is represented as an independent API
 device: DHT22 reports temperature and humidity, while each DS18B20 reports only temperature.
 
+Sensor capture and HTTP delivery are decoupled by a bounded FIFO queue in ESP32 RAM.
+The firmware captures every minute even while Server API is unavailable, retains up
+to 180 individual sensor records, and drains them oldest-first after recovery. The
+queue is intentionally lost on reset at this stage.
+
 The first implemented Server API milestone contains:
 
 - Fastify request validation;
@@ -101,6 +106,11 @@ The Telegram Bot renders that series locally as SVG and converts it to a 1200×7
 PNG. When humidity exists, both metrics share the time axis; temperature uses the
 left Y axis and humidity the right Y axis. Temperature-only devices render a single
 series. No measurement data is sent to an external chart service.
+
+Each measurement carries `measured_at`, generated from the ESP32 NTP-synchronized
+clock, and a server-assigned receipt `timestamp`. Historical ordering, aggregation,
+notification measurement time, and Telegram display use `measured_at`; receipt time
+is retained for transport diagnostics and future outage detection.
 
 ## Device registry
 

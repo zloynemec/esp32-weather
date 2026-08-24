@@ -1,9 +1,9 @@
-import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import dotenv from "dotenv";
 
-const environmentDirectory = process.env.INIT_CWD ?? process.cwd();
-dotenv.config({ path: resolve(environmentDirectory, ".env"), quiet: true });
+const environmentFile = fileURLToPath(new URL("../../.env", import.meta.url));
+dotenv.config({ path: environmentFile, quiet: true });
 
 export interface BotConfig {
   telegramBotToken: string;

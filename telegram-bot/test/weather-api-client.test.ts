@@ -13,6 +13,7 @@ describe("WeatherApiClient", () => {
           {
             id: 4,
             device_id: "esp32-test-01",
+            measured_at: "2026-08-22T12:34:00.000Z",
             timestamp: "2026-08-22T12:34:56.000Z",
             temperature: 23.7,
             humidity: 56.2,

@@ -60,6 +60,7 @@ function isMeasurement(value: unknown): value is Measurement {
     isRecord(value) &&
     typeof value.id === "number" &&
     typeof value.device_id === "string" &&
+    typeof value.measured_at === "string" &&
     typeof value.timestamp === "string" &&
     typeof value.temperature === "number" &&
     isNullableNumber(value.humidity) &&

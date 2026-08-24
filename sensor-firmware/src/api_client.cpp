@@ -8,17 +8,22 @@ ApiClient::ApiClient(const char* serverUrl) : serverUrl_(serverUrl) {}
 
 bool ApiClient::sendMeasurement(
     const char* deviceId,
+    const char* measuredAt,
     const SensorReading& reading,
     uint64_t uptimeSeconds,
-    int32_t wifiRssi) const {
+    int32_t wifiRssi,
+    bool hasWifiRssi) const {
   JsonDocument document;
   document["device_id"] = deviceId;
+  document["measured_at"] = measuredAt;
   document["temperature"] = reading.temperature;
   if (reading.hasHumidity) {
     document["humidity"] = reading.humidity;
   }
   document["uptime"] = uptimeSeconds;
-  document["wifi_rssi"] = wifiRssi;
+  if (hasWifiRssi) {
+    document["wifi_rssi"] = wifiRssi;
+  }
 
   String payload;
   serializeJson(document, payload);
@@ -30,6 +35,8 @@ bool ApiClient::sendMeasurement(
     return false;
   }
 
+  httpClient.setConnectTimeout(2000);
+  httpClient.setTimeout(3000);
   httpClient.addHeader("Content-Type", "application/json");
   const int statusCode = httpClient.POST(payload);
   const bool accepted = statusCode >= 200 && statusCode < 300;

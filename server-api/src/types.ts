@@ -1,5 +1,6 @@
 export interface NewMeasurement {
   device_id: string;
+  measured_at: string;
   temperature: number;
   humidity?: number;
   uptime?: number;
@@ -9,6 +10,7 @@ export interface NewMeasurement {
 export interface Measurement {
   id: number;
   device_id: string;
+  measured_at: string;
   timestamp: string;
   temperature: number;
   humidity: number | null;

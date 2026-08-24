@@ -17,11 +17,11 @@ describe("notification events API", () => {
     let currentTime = new Date("2026-08-22T12:00:00.000Z");
     app = buildApp({ databasePath: ":memory:", now: () => currentTime });
 
-    await postMeasurement(app, 20, 40);
+    await postMeasurement(app, currentTime.toISOString(), 20, 40);
     assert.deepEqual(await pendingNotifications(app), []);
 
     currentTime = new Date("2026-08-22T12:01:00.000Z");
-    await postMeasurement(app, 21.2, 46);
+    await postMeasurement(app, currentTime.toISOString(), 21.2, 46);
     const notifications = await pendingNotifications(app);
 
     assert.equal(notifications.length, 1);
@@ -38,16 +38,16 @@ describe("notification events API", () => {
     let currentTime = new Date("2026-08-22T12:00:00.000Z");
     app = buildApp({ databasePath: ":memory:", now: () => currentTime });
 
-    await postMeasurement(app, 20, 40);
+    await postMeasurement(app, currentTime.toISOString(), 20, 40);
     currentTime = new Date("2026-08-22T12:01:00.000Z");
-    await postMeasurement(app, 21, 40);
+    await postMeasurement(app, currentTime.toISOString(), 21, 40);
 
     currentTime = new Date("2026-08-22T12:06:00.000Z");
-    await postMeasurement(app, 23, 40);
+    await postMeasurement(app, currentTime.toISOString(), 23, 40);
     assert.equal((await pendingNotifications(app)).length, 1);
 
     currentTime = new Date("2026-08-22T12:11:00.000Z");
-    await postMeasurement(app, 22.1, 40);
+    await postMeasurement(app, currentTime.toISOString(), 22.1, 40);
     const notifications = await pendingNotifications(app);
     assert.equal(notifications.length, 2);
     assert.equal(notifications[1].previous_temperature, 21);
@@ -57,9 +57,9 @@ describe("notification events API", () => {
   it("marks an event as delivered so it leaves the pending queue", async () => {
     let currentTime = new Date("2026-08-22T12:00:00.000Z");
     app = buildApp({ databasePath: ":memory:", now: () => currentTime });
-    await postMeasurement(app, 20, 40);
+    await postMeasurement(app, currentTime.toISOString(), 20, 40);
     currentTime = new Date("2026-08-22T12:01:00.000Z");
-    await postMeasurement(app, 21, 40);
+    await postMeasurement(app, currentTime.toISOString(), 21, 40);
     const [notification] = await pendingNotifications(app);
     assert.ok(notification);
 
@@ -77,9 +77,9 @@ describe("notification events API", () => {
     let currentTime = new Date("2026-08-22T12:00:00.000Z");
     app = buildApp({ databasePath: ":memory:", now: () => currentTime });
 
-    await postTemperatureOnlyMeasurement(app, 18.5);
+    await postTemperatureOnlyMeasurement(app, currentTime.toISOString(), 18.5);
     currentTime = new Date("2026-08-22T12:10:00.000Z");
-    await postTemperatureOnlyMeasurement(app, 20);
+    await postTemperatureOnlyMeasurement(app, currentTime.toISOString(), 20);
 
     const [notification] = await pendingNotifications(app);
     assert.ok(notification);
@@ -93,25 +93,32 @@ describe("notification events API", () => {
 
 async function postMeasurement(
   instance: FastifyInstance,
+  measuredAt: string,
   temperature: number,
   humidity: number,
 ): Promise<void> {
   const response = await instance.inject({
     method: "POST",
     url: "/api/v1/measurements",
-    payload: { device_id: "esp32-test-01", temperature, humidity },
+    payload: {
+      device_id: "esp32-test-01",
+      measured_at: measuredAt,
+      temperature,
+      humidity,
+    },
   });
   assert.equal(response.statusCode, 201);
 }
 
 async function postTemperatureOnlyMeasurement(
   instance: FastifyInstance,
+  measuredAt: string,
   temperature: number,
 ): Promise<void> {
   const response = await instance.inject({
     method: "POST",
     url: "/api/v1/measurements",
-    payload: { device_id: "esp32-ds18b20-01", temperature },
+    payload: { device_id: "esp32-ds18b20-01", measured_at: measuredAt, temperature },
   });
   assert.equal(response.statusCode, 201);
 }

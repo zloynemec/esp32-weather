@@ -10,6 +10,8 @@ Responsibilities:
 - connect to Wi-Fi;
 - read temperature and humidity from a DHT22 and temperature from two DS18B20 sensors on one 1-Wire bus;
 - send one measurement per logical sensor every minute to Server API;
+- keep up to 180 unsent measurements in a volatile FIFO queue and retry oldest first;
+- timestamp captured readings using an NTP-synchronized UTC clock;
 - expose basic diagnostics such as uptime and Wi-Fi RSSI.
 
 Example payload:
@@ -17,6 +19,7 @@ Example payload:
 ```json
 {
   "device_id": "esp32-test-01",
+  "measured_at": "2026-08-24T12:34:00Z",
   "temperature": 23.7,
   "humidity": 56.2,
   "uptime": 182340,
@@ -29,6 +32,7 @@ Responsibilities:
 - accept measurements;
 - validate payload;
 - add server timestamp;
+- preserve the sensor-provided capture timestamp for history and analysis;
 - store measurements in SQLite;
 - expose history;
 - aggregate hourly data;
@@ -54,6 +58,7 @@ Current request contract:
 ```json
 {
   "device_id": "esp32-test-01",
+  "measured_at": "2026-08-24T12:34:00Z",
   "temperature": 23.7,
   "humidity": 56.2,
   "uptime": 182340,
@@ -66,17 +71,19 @@ Temperature-only payload:
 ```json
 {
   "device_id": "esp32-wokwi-ds18b20-01",
+  "measured_at": "2026-08-24T12:34:00Z",
   "temperature": 18.5,
   "uptime": 182340,
   "wifi_rssi": -61
 }
 ```
 
-- `device_id` and `temperature` are required;
+- `device_id`, `measured_at`, and `temperature` are required;
 - `humidity` is optional and is stored as `NULL` for temperature-only sensors;
 - `uptime` and `wifi_rssi` are optional diagnostics;
 - unknown properties are rejected;
-- the server assigns the measurement `timestamp` and returns the stored row with
+- `measured_at` is the UTC time captured by the device; the server assigns the
+  receipt `timestamp` and returns both fields with
   HTTP status `201`.
 
 History endpoint:
@@ -144,6 +151,7 @@ Initial logical table:
 
 - id
 - device_id
+- measured_at
 - timestamp
 - temperature
 - humidity
@@ -152,6 +160,8 @@ Initial logical table:
 
 `humidity` is nullable. Temperature-only devices still participate in storage,
 temperature notification rules and chart aggregation; humidity rules are skipped.
+Queries, chart buckets, notification measurement times, and Telegram presentation
+use `measured_at`. The receipt `timestamp` remains available for delivery and outage analysis.
 
 At one measurement per minute:
 - 1,440 rows/day/device
@@ -223,3 +233,12 @@ with PlatformIO and run it on a virtual ESP32 in Wokwi:
 The emulator is the Wokwi hardware environment, not a separate Node.js data
 generator. The same firmware structure must later run on a physical ESP32 without
 requiring Server API or Telegram architecture changes.
+
+## 7. Volatile delivery queue
+
+Sensor capture is independent from HTTP delivery. Every successful sensor read is
+placed into a FIFO RAM queue before upload. A record is removed only after a 2xx
+response; failures are retried after five seconds. With three logical sensors, the
+180-record capacity holds about one hour. On overflow the oldest record is dropped.
+The queue is intentionally volatile for this milestone and is cleared by reset or
+power loss.

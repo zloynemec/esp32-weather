@@ -14,14 +14,14 @@ afterEach(async () => {
 
 describe("measurement chart API", () => {
   it("aggregates temperature and humidity into aligned buckets", async () => {
-    let currentTime = new Date("2026-08-22T12:01:00.000Z");
+    let currentTime = new Date("2026-08-22T12:25:00.000Z");
     app = buildApp({ databasePath: ":memory:", now: () => currentTime });
 
-    await postMeasurement(app, 20, 40);
-    currentTime = new Date("2026-08-22T12:05:00.000Z");
-    await postMeasurement(app, 22, 44);
-    currentTime = new Date("2026-08-22T12:16:00.000Z");
-    await postMeasurement(app, 24, 48);
+    await postMeasurement(app, "2026-08-22T12:01:00.000Z", 20, 40);
+    currentTime = new Date("2026-08-22T12:26:00.000Z");
+    await postMeasurement(app, "2026-08-22T12:05:00.000Z", 22, 44);
+    currentTime = new Date("2026-08-22T12:27:00.000Z");
+    await postMeasurement(app, "2026-08-22T12:16:00.000Z", 24, 48);
     currentTime = new Date("2026-08-22T12:30:00.000Z");
 
     const response = await app.inject({
@@ -64,7 +64,11 @@ describe("measurement chart API", () => {
     await app.inject({
       method: "POST",
       url: "/api/v1/measurements",
-      payload: { device_id: "esp32-ds18b20-01", temperature: 18.5 },
+      payload: {
+        device_id: "esp32-ds18b20-01",
+        measured_at: currentTime.toISOString(),
+        temperature: 18.5,
+      },
     });
     currentTime = new Date("2026-08-22T12:30:00.000Z");
 
@@ -80,13 +84,19 @@ describe("measurement chart API", () => {
 
 async function postMeasurement(
   instance: FastifyInstance,
+  measuredAt: string,
   temperature: number,
   humidity: number,
 ): Promise<void> {
   const response = await instance.inject({
     method: "POST",
     url: "/api/v1/measurements",
-    payload: { device_id: "esp32-test-01", temperature, humidity },
+    payload: {
+      device_id: "esp32-test-01",
+      measured_at: measuredAt,
+      temperature,
+      humidity,
+    },
   });
   assert.equal(response.statusCode, 201);
 }

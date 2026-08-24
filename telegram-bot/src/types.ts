@@ -12,6 +12,7 @@ export interface Device {
 export interface Measurement {
   id: number;
   device_id: string;
+  measured_at: string;
   timestamp: string;
   temperature: number;
   humidity: number | null;

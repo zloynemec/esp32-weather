@@ -26,11 +26,16 @@
 #define WEATHER_DS18B20_DEVICE_2_ID "esp32-wokwi-ds18b20-02"
 #endif
 
+#ifndef WEATHER_NTP_SERVER
+#define WEATHER_NTP_SERVER "pool.ntp.org"
+#endif
+
 namespace AppConfig {
 
 constexpr char kWifiSsid[] = WEATHER_WIFI_SSID;
 constexpr char kWifiPassword[] = WEATHER_WIFI_PASSWORD;
 constexpr char kServerUrl[] = WEATHER_SERVER_URL;
+constexpr char kNtpServer[] = WEATHER_NTP_SERVER;
 constexpr char kDhtDeviceId[] = WEATHER_DEVICE_ID;
 constexpr const char* kDs18b20DeviceIds[] = {
     WEATHER_DS18B20_DEVICE_1_ID,
@@ -44,5 +49,6 @@ constexpr size_t kDs18b20SensorCount =
 constexpr uint32_t kMeasurementIntervalMs = 60000UL;
 constexpr uint32_t kWifiRetryIntervalMs = 5000UL;
 constexpr uint32_t kWifiConnectTimeoutMs = 20000UL;
+constexpr uint32_t kUploadRetryIntervalMs = 5000UL;
 
 }  // namespace AppConfig
